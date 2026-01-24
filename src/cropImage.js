@@ -2,7 +2,7 @@ const sharp = require('sharp');
 const path = require('path');
 const fs = require('fs');
 const chalk = require('chalk');
-const { MODES, TEMP_FOLDER_PATH } = require('./consts');
+const { MODES, TEMP_FOLDER_PATH } = require('./consts.js');
 
 const regExp = /.+\.(png|jpg|jpeg)/;
 
@@ -15,14 +15,14 @@ const createTempFolder = (path = TEMP_FOLDER_PATH) => {
     }
 };
 
-const handleCrop = async (fileOrFolder, preset, parseDirectories, isRecursive, mode, depth = 0) => {
+const handleCrop = async (fileOrFolder, presetOrSplit, parseDirectories, isRecursive, mode, depth = 0) => {
     let success = 0,
         skipped = 0,
         errors = 0;
 
     const stats = fs.lstatSync(fileOrFolder);
     if (stats.isFile() && regExp.test(fileOrFolder)) {
-        const result = await cropImage(fileOrFolder, preset, mode);
+        const result = await cropImage(fileOrFolder, presetOrSplit, mode);
 
         if (result) success++;
         else if (result === null) skipped++;
@@ -40,7 +40,7 @@ const handleCrop = async (fileOrFolder, preset, parseDirectories, isRecursive, m
         for (const filePath of files) {
             const [successCount, skippedCount, errorCount] = await handleCrop(
                 path.join(fileOrFolder, filePath),
-                preset,
+                presetOrSplit,
                 parseDirectories,
                 isRecursive,
                 mode,
@@ -56,8 +56,9 @@ const handleCrop = async (fileOrFolder, preset, parseDirectories, isRecursive, m
     return [success, skipped, errors];
 };
 
-const cropImage = async (file, preset, mode = safe) => {
-    const [x, y, width, height] = preset;
+const cropImage = async (file, presetOrSplit, mode = 'safe') => {
+    const [x, y, width, height] = presetOrSplit;
+    const isSplit = !width && !height;
 
     console.log(chalk.green(file));
 
@@ -66,7 +67,7 @@ const cropImage = async (file, preset, mode = safe) => {
     const needsCropX = width < imageWidth;
     const needsCropY = height < imageHeight;
 
-    if (!needsCropX && !needsCropY) {
+    if (!isSplit && !needsCropX && !needsCropY) {
         console.log(
             'The image size',
             [imageWidth, imageHeight],
@@ -82,7 +83,9 @@ const cropImage = async (file, preset, mode = safe) => {
     const xValid = x >= 0 && x <= imageWidth && x + width <= imageWidth;
     const yValid = y >= 0 && y <= imageHeight && y + height <= imageHeight;
 
-    if (!xValid || !yValid) {
+    // if (!xValid || !yValid) {
+
+    if (!isSplit && (!xValid || !yValid)) {
         console.log(
             "Can't crop the image of a size ",
             [imageWidth, imageHeight],
@@ -108,11 +111,49 @@ const cropImage = async (file, preset, mode = safe) => {
 
     console.log('Cropping source image\n');
 
+    if (isSplit) {
+        const splitWidth = imageWidth / x;
+        const splitHeight = imageHeight / y;
+
+        let counter = 1;
+
+        for (let j = 0; j < y; j++) {
+            for (let i = 0; i < x; i++) {
+                if (
+                    !(await executeCrop(
+                        file,
+                        i * splitWidth,
+                        j * splitHeight,
+                        splitWidth,
+                        splitHeight,
+                        String(counter++).padStart(3, '0')
+                    ))
+                ) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    } else {
+        return await executeCrop(file, x, y, width, height);
+    }
+};
+
+async function executeCrop(file, x, y, width, height, suffix) {
+    let output = file;
+    if (suffix) {
+        const name = file.split('.');
+        const ext = name.pop();
+
+        output = [...name, suffix, ext].join('.');
+    }
+
     return await sharp(file)
         .withMetadata()
         .extract({ left: x, top: y, width, height })
         .toBuffer()
-        .then((buffer) => sharp(buffer).toFile(file)) // a hack to save into the same file
+        .then((buffer) => sharp(buffer).toFile(output)) // a hack to save into the same file
         .then(() => {
             console.log(chalk.green('Success.'));
 
@@ -126,6 +167,6 @@ const cropImage = async (file, preset, mode = safe) => {
         .finally(() => {
             console.log('=====');
         });
-};
+}
 
 module.exports = { createTempFolder, handleCrop };

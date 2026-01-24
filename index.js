@@ -1,11 +1,13 @@
 const chalk = require('chalk');
-const { createTempFolder, handleCrop } = require('./src/cropImage');
-const { parseArgs } = require('./src/parseArgs');
-const { MODES, TEMP_FOLDER_PATH } = require('./src/consts');
+const { createTempFolder, handleCrop } = require('./src/cropImage.js');
+const { parseArgs } = require('./src/parseArgs.js');
+const { MODES, TEMP_FOLDER_PATH } = require('./src/consts.js');
 
-const [preset, mode, parseDirectories, isRecursive, fileList] = parseArgs();
+const { preset, split, mode, parseDirectories, isRecursive, fileList } = parseArgs();
 
-console.log('Cropping dropped images from coordinates', preset.slice(0, 2), 'until coordinates', preset.slice(2));
+preset && console.log('Cropping dropped images from coordinates', preset.slice(0, 2), 'until', preset.slice(2));
+split && console.log('Splitting dropped images by', split);
+
 if (mode === MODES.safe) console.log('Backups of the cropped images will be stored in', TEMP_FOLDER_PATH);
 else console.log('No backup images will be stored');
 
@@ -20,10 +22,10 @@ const cropImages = async () => {
     for (const path of fileList) {
         const [successCount, skippedCount, errorCount] = await handleCrop(
             path,
-            preset,
+            preset || split,
             parseDirectories,
             isRecursive,
-            mode
+            mode,
         );
 
         success += successCount;
@@ -34,6 +36,7 @@ const cropImages = async () => {
     console.log(chalk.green('Cropped'), success);
     if (skipped) console.log(chalk.blueBright('Skipped'), skipped);
     if (errors) console.log(chalk.red('Errors:'), errors);
+    if (skipped || errors) process.exit(1);
 };
 
 cropImages();

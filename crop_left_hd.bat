@@ -7,6 +7,11 @@
 @REM 5. [recursive] - recursive or notRecursive
 @REM 6. [dropped files] - any files you dropped on the bat. Should be folders, png or jpg images
 
-node "%~dp0index.js" CROP_HD_LEFT safe imageOnly notRecursive %*
+node "%~dp0index.js"^
+ --preset=CROP_HD_LEFT^
+ --mode=safe^
+ --parseDirectories=withDirectories^
+ --isRecursive=recursive^
+ %*
 
-pause
+if errorlevel 1 pause
